@@ -2,9 +2,13 @@
 
 ## `arrondissements_ouidah.csv`
 
-Liste des 13 arrondissements de la commune de Ouidah et de leurs
-quartiers/villages, extraite du fichier `LISTE_RPV_UPR_OUIDAH_CONSOLIDE_VF.xlsx`
-fourni le 13/09/2026.
+Liste des **10 arrondissements** de la commune de Ouidah retenus pour le
+projet et de leurs quartiers/villages (77 au total), extraite du fichier
+`LISTE_RPV_UPR_OUIDAH_CONSOLIDE_VF.xlsx` fourni le 13/09/2026 : AVLEKETE,
+GAKPE, HOUAKPE DAHO, DJEGBADJI, OUIDAH I, OUIDAH II, OUIDAH III, OUIDAH IV,
+PAHOU, SAVI. Le fichier source distinguait PAHOU I à IV comme 4 zones
+électorales séparées ; il s'agit en réalité de subdivisions d'un seul et
+même arrondissement PAHOU, fusionnées ici en conséquence.
 
 **Important — ce qui a été gardé et ce qui a été écarté :** le fichier source
 est un répertoire de mandataires de parti pour les élections du 11 janvier

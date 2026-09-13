@@ -2,7 +2,7 @@
 
 Système d'alerte communautaire par WhatsApp pour la remontée et le tri des
 signalements des chefs de quartier/village vers l'arrondissement et la
-mairie, pour les 13 arrondissements de la commune de Ouidah.
+mairie, pour les 10 arrondissements de la commune de Ouidah.
 
 - Proposition complète (architecture, grille de classification, tableau de
   bord, escalade, budget) : voir le document partagé avec le porteur du
@@ -14,7 +14,7 @@ mairie, pour les 13 arrondissements de la commune de Ouidah.
 
 ## Architecture en bref
 
-13 numéros WhatsApp dédiés (niveau 1, un par arrondissement, tenus par
+10 numéros WhatsApp dédiés (niveau 1, un par arrondissement, tenus par
 chaque secrétariat d'arrondissement) reçoivent les messages des chefs de
 quartier/village. Un script Google Apps Script partagé les classe
 automatiquement par urgence (Faible / À surveiller / Critique) et par
