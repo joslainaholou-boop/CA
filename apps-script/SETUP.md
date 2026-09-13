@@ -30,6 +30,23 @@ le même tableau de bord, le même script et le même numéro niveau 2 (mairie).
 3. Menu **API Keys** → **Create Key** → copier la clé (elle ne sera montrée
    qu'une fois).
 
+## 1bis. Obtenir une clé API OpenAI (transcription des notes vocales)
+
+1. Aller sur **platform.openai.com**, créer un compte (ou se connecter),
+   ajouter un moyen de paiement (facturation à l'usage, quelques centimes par
+   minute de note vocale transcrite — négligeable à votre volume).
+2. Menu **API Keys** → **Create new secret key** → copier la clé.
+
+**Important à savoir sur le fon :** cette transcription automatique est
+fiable pour le français, mais aucun service grand public — celui-ci compris —
+ne transcrit le fon de façon fiable aujourd'hui. Le script tente quand même
+la transcription et détecte la langue reconnue : si ce n'est pas du français,
+la ligne est marquée « ⚠️ à vérifier » dans le tableau de bord, avec un lien
+pour réécouter l'audio original. Rien n'est donc jamais classé à l'aveugle
+sur une transcription douteuse — mais un chef qui s'exprime en fon demandera
+un peu plus d'attention manuelle qu'un message écrit ou parlé en français, le
+temps qu'une meilleure solution existe pour cette langue.
+
 ## 2. Récupérer les identifiants WhatsApp (Meta) — pour les 10 numéros
 
 Sur **developers.facebook.com**, dans l'app créée en semaine 2 :
@@ -49,12 +66,13 @@ Sur **developers.facebook.com**, dans l'app créée en semaine 2 :
 2. Supprimez le contenu par défaut et collez tout le contenu du fichier
    `Code.gs` fourni.
 3. Icône **⚙️ Paramètres du projet** → **Propriétés du script → Ajouter une
-   propriété du script**, et créez les 5 propriétés listées en haut de
+   propriété du script**, et créez les 6 propriétés listées en haut de
    `Code.gs` :
 
    | Propriété | Valeur |
    |---|---|
    | `ANTHROPIC_API_KEY` | la clé obtenue à l'étape 1 |
+   | `OPENAI_API_KEY` | la clé obtenue à l'étape 1bis (notes vocales) |
    | `WHATSAPP_TOKEN` | le jeton permanent obtenu à l'étape 2 (valable pour les 10 numéros) |
    | `WEBHOOK_VERIFY_TOKEN` | un mot de passe que vous inventez (ex. `oeilduquartier2026`) |
    | `SHEET_ID` | l'identifiant du tableau de bord (dans son URL, entre `/d/` et `/edit`) |
@@ -93,7 +111,13 @@ Sur **developers.facebook.com**, dans l'app créée en semaine 2 :
 4. Envoyer un message clairement critique (ex. *« incendie chez moi
    maintenant »*) et vérifier qu'un message arrive immédiatement sur le
    numéro niveau 2 (mairie).
-5. Répéter le test pour 2 ou 3 autres arrondissements avant d'ouvrir aux 10.
+5. Envoyer une **note vocale** en français : vérifier qu'une ligne apparaît
+   dans `Remontées` avec le texte transcrit et un lien « écouter » dans la
+   colonne `Notes`. Un dossier Drive nommé « Œil du Quartier — Audios reçus »
+   est créé automatiquement au premier envoi — pensez à le partager avec les
+   comptes Google des secrétariats, comme vous l'avez fait pour le tableau de
+   bord, pour qu'ils puissent ouvrir les liens.
+6. Répéter le test pour 2 ou 3 autres arrondissements avant d'ouvrir aux 10.
 
 ## 7. Activer la synthèse quotidienne
 
