@@ -117,7 +117,14 @@ Sur **developers.facebook.com**, dans l'app créée en semaine 2 :
    est créé automatiquement au premier envoi — pensez à le partager avec les
    comptes Google des secrétariats, comme vous l'avez fait pour le tableau de
    bord, pour qu'ils puissent ouvrir les liens.
-6. Répéter le test pour 2 ou 3 autres arrondissements avant d'ouvrir aux 10.
+6. Envoyer une **photo** (avec ou sans légende, ex. une photo d'une fuite
+   d'eau avec la légende « ça inonde la rue ») : vérifier qu'une ligne
+   apparaît avec un lien « voir » dans `Notes`, et que le résumé généré
+   mentionne ce que Claude a vu sur la photo. Aucune clé supplémentaire n'est
+   nécessaire — Claude regarde l'image directement. Un dossier Drive
+   « Œil du Quartier — Photos reçues » est créé automatiquement au premier
+   envoi ; partagez-le comme celui des audios.
+7. Répéter le test pour 2 ou 3 autres arrondissements avant d'ouvrir aux 10.
 
 ## 7. Activer la synthèse quotidienne
 

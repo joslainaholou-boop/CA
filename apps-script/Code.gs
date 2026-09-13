@@ -8,11 +8,15 @@
  * reconnaît automatiquement quel numéro a reçu le message (fourni par Meta
  * dans chaque appel) pour répondre depuis le bon numéro.
  *
- * Messages écrits ET notes vocales sont pris en charge. Une note vocale est
- * transcrite automatiquement (français fiable ; fon expérimental — voir
- * SETUP.md) avant de passer par le même agent de tri que le texte. L'audio
- * original est toujours conservé dans Drive et lié depuis le tableau de bord,
- * pour qu'un secrétariat puisse réécouter en cas de doute sur la transcription.
+ * Messages écrits, notes vocales ET photos sont pris en charge. Une note
+ * vocale est transcrite automatiquement (français fiable ; fon expérimental
+ * — voir SETUP.md) avant de passer par le même agent de tri que le texte.
+ * Une photo est envoyée telle quelle à Claude (aucune clé supplémentaire
+ * nécessaire) : le modèle la regarde pour confirmer ou nuancer ce qui est
+ * décrit, au lieu de classer sur la seule base d'un texte non vérifié. Sur
+ * une alerte critique ou récurrente sans photo jointe, la réponse au chef
+ * lui suggère d'en envoyer une si possible. Audio et photos sont toujours
+ * conservés dans Drive et liés depuis le tableau de bord.
  *
  * CONFIGURATION (une seule fois, voir SETUP.md) :
  * Dans l'éditeur Apps Script : icône ⚙️ "Paramètres du projet" > "Propriétés
@@ -37,6 +41,7 @@ var SHEET_TAB_CHEFS = 'Chefs';
 var RECURRENCE_FENETRE_JOURS = 7;
 var RECURRENCE_SEUIL = 3;
 var AUDIO_DRIVE_FOLDER = 'Œil du Quartier — Audios reçus';
+var IMAGE_DRIVE_FOLDER = 'Œil du Quartier — Photos reçues';
 
 function getProp_(key) {
   var value = PropertiesService.getScriptProperties().getProperty(key);
@@ -77,12 +82,14 @@ function doPost(e) {
 
     if (message.type === 'audio') {
       handleIncomingAudio_(receivingPhoneNumberId, message.from, message.audio.id);
+    } else if (message.type === 'image') {
+      handleIncomingImage_(receivingPhoneNumberId, message.from, message.image.id, message.image.caption);
     } else if (message.type === 'text') {
       processMessage_(receivingPhoneNumberId, message.from, message.text.body, '');
     } else {
-      // Image, position, etc. : non gérées dans cette version.
+      // Position, document, etc. : non gérées dans cette version.
       sendWhatsAppMessage_(receivingPhoneNumberId, message.from,
-        "Merci. Seuls les messages écrits et les notes vocales sont pris en compte automatiquement pour l'instant.");
+        "Merci. Seuls les messages écrits, les notes vocales et les photos sont pris en compte automatiquement pour l'instant.");
     }
   } catch (err) {
     console.error(err);
@@ -92,8 +99,9 @@ function doPost(e) {
 
 /** Note vocale : transcription, puis même parcours qu'un message écrit. */
 function handleIncomingAudio_(receivingPhoneNumberId, fromWaId, mediaId) {
-  var audioBlob = downloadWhatsAppMedia_(mediaId);
-  var audioUrl = saveAudioToDrive_(audioBlob, fromWaId, new Date());
+  var media = downloadWhatsAppMedia_(mediaId);
+  var audioBlob = media.blob.setName('note_vocale.' + extensionFromMimeType_(media.mimeType));
+  var audioUrl = saveMediaToDrive_(audioBlob, AUDIO_DRIVE_FOLDER, fromWaId, new Date());
   var transcription = transcribeAudio_(audioBlob);
 
   var sourceNote = transcription.language === 'french' || transcription.language === 'fr'
@@ -120,25 +128,41 @@ function handleIncomingAudio_(receivingPhoneNumberId, fromWaId, mediaId) {
   processMessage_(receivingPhoneNumberId, fromWaId, transcription.text, sourceNote);
 }
 
-/** Cœur du tri, partagé par le texte et les notes vocales transcrites. */
-function processMessage_(receivingPhoneNumberId, fromWaId, text, sourceNote) {
+/** Photo (avec ou sans légende) : envoyée telle quelle à Claude, en plus du texte. */
+function handleIncomingImage_(receivingPhoneNumberId, fromWaId, mediaId, caption) {
+  var media = downloadWhatsAppMedia_(mediaId);
+  var imageUrl = saveMediaToDrive_(media.blob, IMAGE_DRIVE_FOLDER, fromWaId, new Date());
+  var text = (caption && caption.trim()) ? caption.trim() : '(photo envoyée sans texte)';
+  var sourceNote = '📷 Photo jointe — voir : ' + imageUrl;
+  var image = { data: Utilities.base64Encode(media.blob.getBytes()), mimeType: media.mimeType };
+
+  processMessage_(receivingPhoneNumberId, fromWaId, text, sourceNote, image);
+}
+
+/** Cœur du tri, partagé par le texte, les notes vocales transcrites, et les photos. */
+function processMessage_(receivingPhoneNumberId, fromWaId, text, sourceNote, image) {
   var chef = lookupChef_(fromWaId);
   var historique = getRecentHistory_(chef.arrondissement, chef.quartier);
-  var classification = classifyMessage_(text, chef, historique);
+  var classification = classifyMessage_(text, chef, historique, image);
 
   appendToSheet_(new Date(), chef, text, classification, sourceNote);
+
+  // Sans photo jointe, on en suggère une sur les cas qui justifient une vérification visuelle.
+  var demanderPhoto = !image ? '\n📷 Si possible, envoyez aussi une photo pour confirmer la situation.' : '';
 
   if (classification.urgence === 'Critique') {
     sendWhatsAppMessage_(receivingPhoneNumberId, getProp_('MAIRIE_WHATSAPP_NUMBER'),
       '🔴 ALERTE CRITIQUE\nArrondissement : ' + chef.arrondissement +
       '\nQuartier/Village : ' + chef.quartier +
       '\nHeure : ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'HH:mm') +
-      '\nRésumé : ' + classification.resume);
-    sendWhatsAppMessage_(receivingPhoneNumberId, fromWaId, '🔴 Message reçu et classé CRITIQUE — transmis immédiatement à la mairie.');
+      '\nRésumé : ' + classification.resume +
+      (image ? '\n📷 Photo jointe par le chef — voir le tableau de bord.' : ''));
+    sendWhatsAppMessage_(receivingPhoneNumberId, fromWaId,
+      '🔴 Message reçu et classé CRITIQUE — transmis immédiatement à la mairie.' + demanderPhoto);
   } else if (classification.recurrent) {
     sendWhatsAppMessage_(receivingPhoneNumberId, fromWaId,
       '⚠️ À noter : ceci est au moins le ' + classification.occurences + 'e signalement pour « ' +
-      classification.categorie + ' » à ' + chef.quartier + ' en ' + RECURRENCE_FENETRE_JOURS + ' jours.');
+      classification.categorie + ' » à ' + chef.quartier + ' en ' + RECURRENCE_FENETRE_JOURS + ' jours.' + demanderPhoto);
   }
 }
 
@@ -172,13 +196,18 @@ function getRecentHistory_(arrondissement, quartier) {
   return recent;
 }
 
-/** Appelle Claude pour classer le message (urgence + catégorie) et renvoie un objet JS. */
-function classifyMessage_(text, chef, historique) {
+/**
+ * Appelle Claude pour classer le message (urgence + catégorie) et renvoie un objet JS.
+ * `image`, optionnel, est {data: base64, mimeType} — une photo jointe par le chef,
+ * que Claude regarde pour confirmer ou nuancer ce que décrit le texte.
+ */
+function classifyMessage_(text, chef, historique, image) {
   var categoriesRecentes = historique.map(function (h) { return h.categorie; }).join(', ') || 'aucune';
 
   var systemPrompt = [
     "Tu es l'agent de tri d'un système d'alerte communautaire au Bénin.",
-    "Tu reçois un message écrit en français courant par un chef de quartier ou de village, souvent avec des fautes ou très court — parfois issu de la transcription automatique d'une note vocale (donc parfois approximatif ou mêlé de fon).",
+    "Tu reçois un message écrit en français courant par un chef de quartier ou de village, souvent avec des fautes ou très court — parfois issu de la transcription automatique d'une note vocale (donc parfois approximatif ou mêlé de fon), et parfois accompagné d'une photo.",
+    "Si une photo est fournie, utilise-la comme preuve visuelle : confirme, nuance ou corrige ce que dit le texte plutôt que de faire confiance au texte seul, et mentionne brièvement ce que tu vois dans le résumé.",
     "Classe-le selon cette grille, sans jamais poser de question :",
     "",
     "URGENCE (choisis-en une seule) :",
@@ -188,7 +217,7 @@ function classifyMessage_(text, chef, historique) {
     "",
     "CATÉGORIE (choisis-en une seule) : Sécurité, Sinistre, Social, Infrastructure, Autre.",
     "",
-    "Si le message est trop confus ou incomplet pour être compris avec certitude, classe-le \"À surveiller\" par prudence plutôt que \"Faible\".",
+    "Si le message (et la photo, le cas échéant) est trop confus ou incomplet pour être compris avec certitude, classe-le \"À surveiller\" par prudence plutôt que \"Faible\".",
     "",
     "Réponds UNIQUEMENT avec un objet JSON, sans texte autour, sans balises markdown, au format exact :",
     '{"urgence": "...", "categorie": "...", "resume": "résumé en une phrase courte"}'
@@ -197,6 +226,13 @@ function classifyMessage_(text, chef, historique) {
   var userPrompt = 'Arrondissement : ' + chef.arrondissement + ' — Quartier/village : ' + chef.quartier +
     '\nCatégories déjà signalées ces ' + RECURRENCE_FENETRE_JOURS + ' derniers jours pour ce quartier : ' + categoriesRecentes +
     '\nMessage reçu : "' + text + '"';
+
+  var content = image
+    ? [
+        { type: 'image', source: { type: 'base64', media_type: image.mimeType, data: image.data } },
+        { type: 'text', text: userPrompt }
+      ]
+    : userPrompt;
 
   var response = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', {
     method: 'post',
@@ -210,7 +246,7 @@ function classifyMessage_(text, chef, historique) {
       max_tokens: 300,
       system: systemPrompt,
       output_config: { effort: 'low' },
-      messages: [{ role: 'user', content: userPrompt }]
+      messages: [{ role: 'user', content: content }]
     }),
     muteHttpExceptions: true
   });
@@ -265,7 +301,7 @@ function sendWhatsAppMessage_(fromPhoneNumberId, toWaId, body) {
   });
 }
 
-/** Télécharge le fichier audio d'une note vocale WhatsApp (deux étapes : URL temporaire, puis fichier). */
+/** Télécharge un média WhatsApp — audio ou image (deux étapes : URL temporaire, puis fichier). */
 function downloadWhatsAppMedia_(mediaId) {
   var metaResponse = UrlFetchApp.fetch('https://graph.facebook.com/v20.0/' + mediaId, {
     headers: { Authorization: 'Bearer ' + getProp_('WHATSAPP_TOKEN') },
@@ -277,17 +313,22 @@ function downloadWhatsAppMedia_(mediaId) {
     headers: { Authorization: 'Bearer ' + getProp_('WHATSAPP_TOKEN') },
     muteHttpExceptions: true
   });
-  var blob = fileResponse.getBlob();
-  var ext = (meta.mime_type || '').indexOf('ogg') !== -1 ? 'ogg' : 'oga';
-  return blob.setName('note_vocale.' + ext);
+  return { blob: fileResponse.getBlob(), mimeType: meta.mime_type || 'application/octet-stream' };
 }
 
-/** Sauvegarde l'audio dans Drive et renvoie un lien pour l'écouter plus tard (partagez le dossier avec les secrétariats). */
-function saveAudioToDrive_(audioBlob, fromWaId, date) {
-  var folders = DriveApp.getFoldersByName(AUDIO_DRIVE_FOLDER);
-  var folder = folders.hasNext() ? folders.next() : DriveApp.createFolder(AUDIO_DRIVE_FOLDER);
-  var filename = Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyy-MM-dd_HHmm') + '_' + fromWaId + '.' + audioBlob.getName().split('.').pop();
-  var file = folder.createFile(audioBlob.copyBlob().setName(filename));
+/** Extension de fichier plausible à partir d'un type MIME, pour nommer les fichiers sauvegardés. */
+function extensionFromMimeType_(mimeType) {
+  var map = { 'audio/ogg': 'ogg', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+  return map[mimeType] || (mimeType.indexOf('audio/') === 0 ? 'oga' : 'bin');
+}
+
+/** Sauvegarde un média (audio ou photo) dans Drive et renvoie un lien pour le consulter plus tard (partagez le dossier avec les secrétariats). */
+function saveMediaToDrive_(blob, folderName, fromWaId, date) {
+  var folders = DriveApp.getFoldersByName(folderName);
+  var folder = folders.hasNext() ? folders.next() : DriveApp.createFolder(folderName);
+  var ext = extensionFromMimeType_(blob.getContentType() || '');
+  var filename = Utilities.formatDate(date, Session.getScriptTimeZone(), 'yyyy-MM-dd_HHmm') + '_' + fromWaId + '.' + ext;
+  var file = folder.createFile(blob.copyBlob().setName(filename));
   return file.getUrl();
 }
 
